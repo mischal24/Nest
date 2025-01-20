@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "nest.h": "c",
+        "utils.h": "c"
+    }
+}

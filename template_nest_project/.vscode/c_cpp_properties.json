@@ -1,0 +1,19 @@
+{
+    "configurations": [
+      {
+        "name": "Win32",
+        "includePath": [
+          "${workspaceFolder}/..",
+          "C:/Users/ocleo/Desktop/nest/include",
+          "C:/Users/ocleo/Desktop/nest/lib",
+          "C:/Users/ocleo/Desktop/nest/src"
+        ],
+        "defines": [],
+        "compilerPath": "C:/Program Files/mingw-w64/w64devkit/bin/gcc",
+        "cStandard": "c11",
+        "cppStandard": "c++17",
+        "intelliSenseMode": "gcc-x64"
+      }
+    ],
+    "version": 4
+}
