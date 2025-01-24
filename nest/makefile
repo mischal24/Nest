@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -Iinclude -Isrc
-LDFLAGS = -Llib -lSDL2 -mwindows
+LDFLAGS = -Llib -lSDL2 #-mwindows
 
 BUILD_DIR = $(dir $(MAIN_C))build
 SRC_DIR = src
