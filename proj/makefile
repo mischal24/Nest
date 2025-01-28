@@ -5,11 +5,12 @@ ENGINE_DIR := C:/Users/ocleo/Desktop/nest
 MAIN_C := $(abspath main.c)
 
 all:
-	@echo "Building nest and executable..."
 	$(MAKE) -C $(ENGINE_DIR) MAIN_C=$(MAIN_C)
 
+run:
+	$(MAKE) -C $(ENGINE_DIR) MAIN_C=$(MAIN_C) run
+
 clean:
-	@echo "Cleaning build files..."
 	$(MAKE) -C $(ENGINE_DIR) MAIN_C=$(MAIN_C) clean
 
 .PHONY: all clean

@@ -3,6 +3,22 @@
 
 #include <SDL2/SDL.h>
 
+float deltaTime(void);
+
+typedef enum bool {
+    FALSE = 0,
+    TRUE = 1
+} bool;
+
+typedef struct color{
+    Uint8 r;
+    Uint8 g;
+    Uint8 b;
+} color;
+
+color rgb(int r, int g, int b);
+color hex(char* h);
+
 typedef void (*stateFunction)(void*);
 
 typedef struct state {
@@ -12,35 +28,35 @@ typedef struct state {
 } state;
 
 void setCurrentState(stateFunction init, stateFunction update, stateFunction exit);
-state* getCurrentState();
+state* getCurrentState(void);
 
 typedef struct nest {
     SDL_Window* window;
-    SDL_Surface* surface;
     SDL_Renderer* renderer;
 } nest;
 
 int initNest(nest* n, const char* title, int width, int height);
-void runNest(nest* n);
-void cleanNest(nest* n);
+void setBackgroundColor(color c);
+void runNest(void);
+void cleanNest(void);
 
 typedef struct vector2 {
     float x;
     float y;
 } vector2;
 
-vector2 vector_zero();
-vector2 vector_up();
-vector2 vector_right();
-void vector_set(vector2* a, float x, float y);
-void vector_neg(vector2* a);
-void vector_add(vector2* a, vector2* b1, vector2* b2);
-void vector_sub(vector2* a, vector2* b1, vector2* b2);
-void vector_normalize(vector2* a);
-void vector_scale(vector2* a, float scale);
-float vector_length(vector2* a);
-float vector_distance(vector2* a, vector2* b);
-float vector_dotprod(vector2* a, vector2* b);
+vector2 vectorZero(void);
+vector2 vectorUp(void);
+vector2 vectorRight(void);
+void vectorSet(vector2* a, float x, float y);
+void vectorNeg(vector2* a);
+void vectorAdd(vector2* a, vector2* b1, vector2* b2);
+void vectorSub(vector2* a, vector2* b1, vector2* b2);
+void vectorNormalize(vector2* a);
+void vectorScale(vector2* a, float scale);
+float vectorLength(vector2* a);
+float vectorDistance(vector2* a, vector2* b);
+float vectorDotProd(vector2* a, vector2* b);
 
 typedef float (*angle);
 
@@ -57,36 +73,42 @@ void angleToVectorRad(vector2* v, angle rad);
 float angleLerp(angle a, angle b, float t);
 float angleLerpRad(angle a, angle b, float t);
 
-typedef struct color{
-    Uint8 r;
-    Uint8 g;
-    Uint8 b;
-} color;
+typedef struct entity {
+    int id;
+    SDL_Texture* tex;
+    vector2 position;
+    bool isActive;
+} entity;
 
-color rgb(int r, int g, int b);
-color hex(char* h);
-
-typedef enum primitiveType {
-    PRIMITIVE_RECT,
-    PRIMITIVE_CIRCLE,
-    PRIMITIVE_TRIANGLE
-} primitiveType;
+typedef enum {
+    RECTANGLE,
+    CIRCLE,
+    TRIANGLE,
+    LINE
+} shapeType;
 
 typedef struct primitive {
-    primitiveType type;
-    
-    vector2 position;
-    angle rotation;
+    entity base;
+    shapeType type;
     color color;
-
-    union shape {
-        struct { float width, height; } rect;
+    union {
+        struct { float width; float height; } rectangle;
         struct { float radius; int segments; } circle;
-        struct { float base, height; } triangle;
-    } shape;
+        struct { float base; float height; float skew; } triangle;
+        struct { vector2 endPoint; float width; } line;
+    };
 } primitive;
 
-primitive createPrimitive(primitiveType type, vector2 position, angle rotation, color color);
-void drawPrimitive(nest* n, primitive* p);
+primitive newRectangle(vector2 position, float width, float height, color color);
+primitive newCircle(vector2 position, float radius, int segments, color color);
+primitive newTriangle(vector2 position, float base, float height, float skew, color color);
+primitive newLine(vector2 pointA, vector2 pointB, float width, color color);
+void drawPrimitive(primitive* p);
+
+typedef SDL_Texture (*texture);
+
+texture textureLoad(char const *path);
+bool textureBind(entity* e, texture t);
+void textureUnbind(entity* e);
 
 #endif

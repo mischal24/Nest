@@ -1,11 +1,25 @@
 #include "nest.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 
 // Trace
 
+// Open
+// Message
+// Close
+
 // General
+
+float deltaTime(void) {
+    static Uint32 lastTime = 0;
+    Uint32 currentTime = SDL_GetTicks();
+    float t = (currentTime - lastTime) / 1000.0f;
+    lastTime = currentTime;
+    return t;
+}
 
 float lerpf(float a, float b, float t) {
     return a + t * (b - a);
@@ -13,6 +27,30 @@ float lerpf(float a, float b, float t) {
 
 int lerpi(int a, int b, float t) {
     return (int)(a + t * (b - a) + 0.5f);
+}
+
+color rgb(int r, int g, int b) {
+    color c;
+
+    c.r = (Uint8)r;
+    c.g = (Uint8)g;
+    c.b = (Uint8)b;
+
+    return c;
+}
+
+color hex(char* h) {
+    color c;
+
+    if (h[0] == '#') {
+        h++;
+    }
+
+    if (sscanf(h, "%2hhx%2hhx%2hhx", &c.r, &c.g, &c.b) != 3) {
+        c.r = c.g = c.b = 0;
+    }
+
+    return c;
 }
 
 // States
@@ -32,11 +70,20 @@ void setCurrentState(stateFunction init, stateFunction update, stateFunction exi
     }
 }
 
-state* getCurrentState() {
+state* getCurrentState(void) {
     return &current;
 }
 
 // Loop
+
+static color backgroundColor;
+int imgFlags;
+
+void setBackgroundColor(color c) {
+    backgroundColor = c;
+}
+
+static nest* initializedNest;
 
 int initNest(nest* n, const char* title, int width, int height) {
     if (!n) {
@@ -54,30 +101,35 @@ int initNest(nest* n, const char* title, int width, int height) {
             return -1;
         }
 
-        n->surface = SDL_GetWindowSurface(n->window);
+        n->renderer = SDL_CreateRenderer(n->window, -1, SDL_RENDERER_ACCELERATED);
 
-        if (!n->surface) {
+        if (!n->renderer) {
             return -1;
         }
 
-        n->renderer = SDL_CreateRenderer(n->window, -1, SDL_RENDERER_SOFTWARE);
-
-        if (!n->renderer) {
-            SDL_DestroyWindow(n->window);
+        imgFlags = IMG_INIT_PNG;
+        
+        if (!(IMG_Init(imgFlags) && imgFlags)) {
             return -1;
         }
     }
 
+    backgroundColor = rgb(0, 0, 0);
+
+    initializedNest = n;
+
     return 0;
 }
 
-void runNest(nest* n) {
-    if (n) {
-        SDL_UpdateWindowSurface(n->window);
+void runNest(void) {
+    if (initializedNest) {
 
-        int running = 1;
+        bool running = TRUE;
+
         while(running)
         {
+            SDL_RenderClear(initializedNest->renderer);
+
             if (current.update) {
                 current.update(NULL);
             }
@@ -85,52 +137,42 @@ void runNest(nest* n) {
             SDL_Event e;
             while(SDL_PollEvent(&e) > 0)
             {
-                SDL_UpdateWindowSurface(n->window);
-
                 if (e.type == SDL_QUIT) {
-                    running = 0;
+                    running = FALSE;
                 }
             }
 
-            SDL_RenderClear(n->renderer);
-            SDL_RenderPresent(n->renderer);
+            SDL_SetRenderDrawColor(initializedNest->renderer, backgroundColor.r, backgroundColor.g, backgroundColor.b, 255);
+            SDL_RenderPresent(initializedNest->renderer);
         }
     }
 }
 
-void cleanNest(nest* n) {
-    if (n) {
+void cleanNest(void) {
+    if (initializedNest) {
         if (current.exit) {
             current.exit(NULL);
         }
 
-        SDL_DestroyRenderer(n->renderer);
-        SDL_DestroyWindow(n->window);
+        SDL_DestroyRenderer(initializedNest->renderer);
+        SDL_DestroyWindow(initializedNest->window);
+        IMG_Quit();
         SDL_Quit();
     }
 }
 
 // Vector
 
-vector2 vectorZero() {
-    vector2 temp;
-    temp.x = 0.0f;
-    temp.y = 0.0f;
-    return temp;
+vector2 vectorZero(void) {
+    return (vector2){ 0, 0 };
 }
 
-vector2 vectorUp() {
-    vector2 temp;
-    temp.x = 0.0f;
-    temp.y = 1.0f;
-    return temp;
+vector2 vectorUp(void) {
+    return (vector2){ 0, 1 };
 }
 
-vector2 vectorRight() {
-    vector2 temp;
-    temp.x = 1.0f;
-    temp.y = 0.0f;
-    return temp;
+vector2 vectorRight(void) {
+    return (vector2){ 1, 0 };
 }
 
 void vectorSet(vector2* a, float x, float y) {
@@ -166,7 +208,7 @@ void vectorNormalize(vector2* a) {
         float length = sqrtf(powf(a->x, 2) + powf(a->x, 2));
 
         if (length <= 0) {
-            vectorZero(a);
+            vectorZero();
         }
         else {
             a->x = (a->x / length);
@@ -287,77 +329,217 @@ float angleLerpRad(angle a, angle b, float t) {
     return *a + t * shortest;
 }
 
-// Color
+// Entities
 
-color rgb(int r, int g, int b) {
-    color c;
-
-    c.r = (Uint8)r;
-    c.g = (Uint8)g;
-    c.b = (Uint8)b;
-
-    return c;
+entity entityInit(int id, vector2 pos) {
+    entity e;
+    e.id = id;
+    e.tex = NULL;
+    e.position = pos;
+    e.isActive = TRUE;
+    return e;
 }
 
-color hex(char* h) {
-    color c;
-
-    if (h[0] == '#') {
-        h++;
+void entityActive(entity *e, bool isActive) {
+    if (isActive == FALSE) {
+        e->isActive = FALSE;
+    } else {
+        e->isActive = TRUE;
     }
+}
 
-    if (sscanf(h, "%2hhx%2hhx%2hhx", &c.r, &c.g, &c.b) != 3) {
-        c.r = c.g = c.b = 0;
-    }
+bool entityIsActive(const entity *e) {
+    return e->isActive;
+}
 
-    return c;
+bool entityCompare(const entity *a, const entity *b) {
+    return a->id == b->id &&
+           a->position.x == b->position.x &&
+           a->position.y == b->position.y &&
+           a->isActive == b->isActive;
 }
 
 // Primitives
 
-primitive createPrimitive(primitiveType type, vector2 position, angle rotation, color color) {
+primitive newRectangle(vector2 position, float width, float height, color color) {
+    entity e = entityInit(rand(), vectorZero());
     primitive p;
-    p.type = type;
-    p.position = position;
-    p.rotation = rotation;
+    p.base = e;
+    p.type = RECTANGLE;
     p.color = color;
-
-    switch (type) {
-        case PRIMITIVE_RECT:
-            p.shape.rect.width = 100.0f;
-            p.shape.rect.height = 100.0f;
-            break;
-        case PRIMITIVE_CIRCLE:
-            p.shape.circle.radius = 50.0f;
-            p.shape.circle.segments = 12;
-            break;
-        case PRIMITIVE_TRIANGLE:
-            p.shape.triangle.base = 100.0f;
-            p.shape.triangle.height = 100.0f;
-            break;
-    }
-
+    p.base.position = position;
+    p.rectangle.width = width;
+    p.rectangle.height = height;
     return p;
 }
 
-void drawPrimitive(nest* n, primitive* p) {
-    if (n && p) {
-        switch (p->type) {
-        case PRIMITIVE_RECT:
-            SDL_Rect rect = {p->position.x, p->position.y, p->shape.rect.width, p->shape.rect.height};
-            SDL_FillRect(n->surface, &rect, SDL_MapRGB(n->surface->format, p->color.r, p->color.g, p->color.b));
-            break;
-        case PRIMITIVE_CIRCLE:
-            break;
-        case PRIMITIVE_TRIANGLE:
+primitive newCircle(vector2 position, float radius, int segments, color color) {
+    entity e = entityInit(rand(), vectorZero());
+    primitive p;
+    p.base = e;
+    p.type = CIRCLE;
+    p.color = color;
+    p.base.position = position;
+    p.circle.radius = radius;
+    p.circle.segments = segments;
+    return p;
+}
+
+primitive newTriangle(vector2 position, float base, float height, float skew, color color) {
+    entity e = entityInit(rand(), vectorZero());
+    primitive p;
+    p.base = e;
+    p.type = TRIANGLE;
+    p.color = color;
+    p.base.position = position;
+    p.triangle.base = base;
+    p.triangle.height = height;
+    p.triangle.skew = skew;
+    return p;
+}
+
+primitive newLine(vector2 pointA, vector2 pointB, float width, color color) {
+    entity e = entityInit(rand(), vectorZero());
+    primitive p;
+    p.base = e;
+    p.type = LINE;
+    p.color = color;
+    p.base.position = pointA;
+    p.line.endPoint = pointB;
+    p.line.width = width;
+    return p;
+}
+
+void drawPrimitive(primitive* p) {
+    switch (p->type) {
+        case RECTANGLE: {
+            SDL_Rect rect = {
+                (int)p->base.position.x, 
+                (int)p->base.position.y,
+                (int)p->rectangle.width,
+                (int)p->rectangle.height
+            };
+            SDL_SetRenderDrawColor(initializedNest->renderer,
+                                   p->color.r,
+                                   p->color.g,
+                                   p->color.b,
+                                   255);
+            SDL_RenderDrawRect(initializedNest->renderer, &rect);
             break;
         }
+        
+        case CIRCLE: {
+            int cx = (int)p->base.position.x;
+            int cy = (int)p->base.position.y;
+            int radius = (int)p->circle.radius;
+            
+            SDL_SetRenderDrawColor(initializedNest->renderer,
+                                   p->color.r,
+                                   p->color.g,
+                                   p->color.b,
+                                   255);
+            
+            for (int i = 0; i < p->circle.segments; i++) {
+                float angle1 = 2.0f * 3.14159f * i / p->circle.segments;
+                float angle2 = 2.0f * 3.14159f * (i + 1) / p->circle.segments;
+                
+                int x1 = (int)(cx + radius * cos(angle1));
+                int y1 = (int)(cy + radius * sin(angle1));
+                int x2 = (int)(cx + radius * cos(angle2));
+                int y2 = (int)(cy + radius * sin(angle2));
+                
+                SDL_RenderDrawLine(initializedNest->renderer, x1, y1, x2, y2);
+            }
+            break;
+        }
+        
+        case TRIANGLE: {
+            SDL_Point points[3] = {
+                { (int)p->base.position.x, (int)p->base.position.y },
+                { (int)(p->base.position.x + p->triangle.base), (int)p->base.position.y },
+                { (int)(p->base.position.x + p->triangle.base / 2 + p->triangle.skew), (int)(p->base.position.y - p->triangle.height) }
+            };
+            
+            SDL_SetRenderDrawColor(initializedNest->renderer,
+                                   p->color.r,
+                                   p->color.g,
+                                   p->color.b,
+                                   255);
+            
+            SDL_RenderDrawLines(initializedNest->renderer, points, 3);
+            SDL_RenderDrawLine(initializedNest->renderer, points[2].x, points[2].y, points[0].x, points[0].y);
+            break;
+        }
+        
+        case LINE: {
+            SDL_SetRenderDrawColor(initializedNest->renderer,
+                                   p->color.r,
+                                   p->color.g,
+                                   p->color.b,
+                                   255);
+            SDL_RenderDrawLine(initializedNest->renderer,
+                               (int)p->base.position.x,
+                               (int)p->base.position.y,
+                               (int)p->line.endPoint.x,
+                               (int)p->line.endPoint.y);
+            break;
+        }
+
+        default:
+            break;
     }
 }
 
 // Textures
 
-// Entities
+texture textureLoad(char const *path) {
+    SDL_Texture* t = NULL;
+    SDL_Surface* s = IMG_Load(path);
+    
+    if (!s) {
+        return NULL;
+    }
+
+    t = SDL_CreateTextureFromSurface(initializedNest->renderer, s);
+    SDL_FreeSurface(s);
+
+    if (!t) {
+        return NULL;
+    }
+
+    return t;
+}
+
+bool textureBind(entity* e, texture t)
+{
+    if (!t) {
+        return FALSE;
+    }
+
+    e->tex = t;
+
+    int w, h;
+    SDL_QueryTexture(e->tex, NULL, NULL, &w, &h);
+
+    SDL_Rect r;
+    r.x = e->position.x;
+    r.y = e->position.y;
+    r.w = w;
+    r.h = h;
+
+    SDL_RenderCopy(initializedNest->renderer, e->tex, NULL, &r);
+
+    return TRUE;
+}
+
+void textureUnbind(entity* e) {
+    if (e->tex != NULL) {
+        SDL_DestroyTexture(e->tex);
+        e->tex = NULL;
+    }
+}
+
+// Animations
 
 // Collision
 
@@ -368,3 +550,7 @@ void drawPrimitive(nest* n, primitive* p) {
 // Input
 
 // Audio
+
+// Particles
+
+// Shaders
